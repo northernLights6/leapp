@@ -432,7 +432,7 @@ wheels = [
 
 [[package]]
 name = "leapp"
-version = "0.7.0"
+version = "0.7.1"
 source = { editable = "." }
 dependencies = [
     { name = "fast-sugiyama", marker = "python_full_version >= '3.11' or (extra == 'extra-5-leapp-warp-cu12' and extra == 'extra-5-leapp-warp-cu13')" },
@@ -455,9 +455,6 @@ dev = [
     { name = "pytest" },
 ]
 test = [
-    { name = "warp-lang" },
-]
-warp = [
     { name = "warp-lang" },
 ]
 warp-cu12 = [
@@ -493,11 +490,10 @@ requires-dist = [
     { name = "safetensors", specifier = ">=0.5.0" },
     { name = "torch", specifier = ">=2.6.0" },
     { name = "warp-lang", marker = "extra == 'test'", specifier = ">=1.16" },
-    { name = "warp-lang", marker = "extra == 'warp'", specifier = ">=1.16" },
     { name = "warp-lang", marker = "extra == 'warp-cu12'", specifier = ">=1.16" },
     { name = "warp-lang", marker = "extra == 'warp-cu13'", specifier = ">=1.16" },
 ]
-provides-extras = ["dev", "warp", "test", "warp-cu12", "warp-cu13"]
+provides-extras = ["dev", "test", "warp-cu12", "warp-cu13"]
 
 [[package]]
 name = "librt"
