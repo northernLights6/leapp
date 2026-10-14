@@ -22,6 +22,7 @@ DGX (precision and DLA overlays), run::
 
 from __future__ import annotations
 
+import json
 from typing import Dict, List, Optional, TypedDict
 
 
@@ -1165,6 +1166,40 @@ def supported_onnx_ops(
     return {name for name, info in ops.items() if info["supported"]}
 
 
+# Unsupported ONNX ops that ``rewrite_unsupported_onnx_ops`` can replace with
+# TensorRT-legal operators. Bool bitwise ops are rewritten only when the
+# inputs are BOOL. The others are decomposed for the dtypes those ops use.
+BOOL_ONLY_SURGEON_OPS = frozenset({"BitwiseAnd", "BitwiseOr", "BitwiseXor"})
+SURGEON_UNSUPPORTED_OPS = frozenset(
+    {
+        "BitwiseAnd",
+        "BitwiseNot",
+        "BitwiseOr",
+        "BitwiseXor",
+        "CenterCropPad",
+        "ConvInteger",
+        "DynamicQuantizeLinear",
+        "MatMulInteger",
+        "QLinearConv",
+        "QLinearMatMul",
+    }
+)
+
+
+def _unsupported_row(name: str, restrictions: str) -> Dict[str, object]:
+    if name in BOOL_ONLY_SURGEON_OPS:
+        surgeon: object = "BOOL"
+    elif name in SURGEON_UNSUPPORTED_OPS:
+        surgeon = True
+    else:
+        surgeon = False
+    return {
+        "name": name,
+        "restrictions": restrictions,
+        "surgeon": surgeon,
+    }
+
+
 def unsupported_onnx_ops(
     tensorrt: Optional[str] = None,
     *,
@@ -1173,3 +1208,95 @@ def unsupported_onnx_ops(
     """Return ONNX op names marked supported=False in the selected catalog."""
     ops = onnx_ops_for_version(tensorrt, cuda=cuda)
     return {name for name, info in ops.items() if not info["supported"]}
+
+
+def unsupported_onnx_op_report(
+    tensorrt: Optional[str] = None,
+    *,
+    cuda: Optional[str] = None,
+) -> Dict[str, object]:
+    """List ONNX operators the TensorRT parser catalog marks unsupported.
+
+    This is the static onnx-tensorrt ``operators.md`` table. It does not query
+    Triton or ONNX Runtime, and it does not read a model file.
+    """
+    catalog = onnx_ops_catalog(tensorrt, cuda=cuda)
+    rows = [
+        _unsupported_row(name, info.get("restrictions") or "")
+        for name, info in sorted(catalog["ops"].items())
+        if not info["supported"]
+    ]
+    return {
+        "tensorrt": catalog["tensorrt"],
+        "cuda": list(catalog["cuda"]),
+        "opset_min": catalog["opset_min"],
+        "opset_max": catalog["opset_max"],
+        "source": catalog["source"],
+        "ops": rows,
+    }
+
+
+def unsupported_onnx_op_report_from_catalog(catalog: Dict[str, object]) -> Dict[str, object]:
+    """Build the same report from a generated ``tensorrt_catalogs`` JSON object."""
+    operators = catalog.get("onnx_operators") or {}
+    names = catalog.get("onnx_unsupported")
+    if names is None and isinstance(operators, dict):
+        names = [
+            name
+            for name, info in operators.items()
+            if isinstance(info, dict) and not info.get("supported", True)
+        ]
+    rows = []
+    for name in names or []:
+        info = operators.get(name) if isinstance(operators, dict) else None
+        restrictions = ""
+        if isinstance(info, dict):
+            restrictions = info.get("restrictions") or ""
+        rows.append(_unsupported_row(name, restrictions))
+    rows.sort(key=lambda row: row["name"])
+    opset = catalog.get("opset") or {}
+    return {
+        "tensorrt": catalog.get("parser_tensorrt_version") or catalog.get("tensorrt"),
+        "cuda": catalog.get("cuda"),
+        "platform": catalog.get("platform"),
+        "opset_min": opset.get("min") if isinstance(opset, dict) else None,
+        "opset_max": opset.get("max") if isinstance(opset, dict) else None,
+        "source": catalog.get("source"),
+        "ops": rows,
+    }
+
+
+def load_unsupported_onnx_op_report(path: str) -> Dict[str, object]:
+    """Load a platform catalog JSON and return its unsupported ONNX operators."""
+    with open(path, encoding="utf-8") as handle:
+        catalog = json.load(handle)
+    report = unsupported_onnx_op_report_from_catalog(catalog)
+    report["catalog"] = path
+    return report
+
+
+def format_unsupported_onnx_op_report(report: Dict[str, object]) -> str:
+    """Render an unsupported-op report as plain text."""
+    header = (
+        f"TensorRT {report.get('tensorrt')} "
+        f"ONNX opset {report.get('opset_min')}-{report.get('opset_max')}"
+    )
+    if report.get("platform"):
+        header += f" ({report['platform']})"
+    lines = [header]
+    if report.get("source"):
+        lines.append(f"source: {report['source']}")
+    ops = report["ops"]
+    lines.append(f"{len(ops)} ONNX operators marked unsupported")
+    lines.append("A trailing 'surgeon' mark has a GraphSurgeon rewrite.")
+    for row in ops:
+        restrictions = row.get("restrictions") or ""
+        parts = [row["name"]]
+        if restrictions:
+            parts.append(restrictions)
+        if row.get("surgeon") is True:
+            parts.append("surgeon")
+        elif row.get("surgeon") == "BOOL":
+            parts.append("surgeon (BOOL inputs)")
+        lines.append("\t".join(parts))
+    return "\n".join(lines)

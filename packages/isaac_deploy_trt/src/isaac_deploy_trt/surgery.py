@@ -592,7 +592,10 @@ def reduce_reshape_rank_for_tensorrt(
 
 def apply_tensorrt_rewrites(graph: GraphLike) -> List[str]:
     """Run all TensorRT GraphSurgeon rewrites. Returns names of edited nodes."""
+    from isaac_deploy_trt.unsupported_surgery import rewrite_unsupported_onnx_ops
+
     rewritten: List[str] = []
+    rewritten.extend(rewrite_unsupported_onnx_ops(graph))
     rewritten.extend(rewrite_uint8_intermediate_casts(graph))
     rewritten.extend(disable_resize_antialias(graph))
     rewritten.extend(reduce_reshape_rank_for_tensorrt(graph))
@@ -626,8 +629,9 @@ def rewrite_onnx_for_tensorrt(
 ) -> ModelProto:
     """Apply GraphSurgeon rewrites that unblock TensorRT parse for typical ONNX graphs.
 
-    Currently: UINT8 intermediate Casts → INT32, Resize ``antialias`` → 0, and
-    Reshape rank > 8 lowered by dropping extent-1 axes. Graph I/O names, dtypes,
+    Currently: decompositions of selected TensorRT-unsupported ops, UINT8
+    intermediate Casts → INT32, Resize ``antialias`` → 0, and Reshape rank > 8
+    lowered by dropping extent-1 axes. Graph I/O names, dtypes,
     and shapes are left unchanged so downstream YAML / Triton bindings stay valid.
     """
     graph = load_graph(model_or_path)

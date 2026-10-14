@@ -24,6 +24,14 @@ Use ``merge-pipeline`` (below) to inline a LEAPP DAG for one Isaac
 | Intermediate `Cast` to UINT8 | Cast to INT32 instead |
 | `Resize` with `antialias != 0` | Set `antialias=0` |
 | `Reshape` to rank > 8 | Drop extent-1 axes; remap following `Transpose` perms |
+| `BitwiseNot`, BOOL `BitwiseAnd` / `Or` / `Xor` | `Sub(-1, x)`, or `Not` / `And` / `Or` / `Xor` |
+| `QLinearConv`, `QLinearMatMul` | Float `Conv` / `MatMul`, zero-point folded into `Sub` |
+| `ConvInteger`, `MatMulInteger` | Float product, then `Cast` to INT32 |
+| `DynamicQuantizeLinear` | `ReduceMin` / `ReduceMax`, `Round`, `Clip` |
+| Static `CenterCropPad` | `Slice` and `Pad` |
+
+`unsupported-ops` marks these with `surgeon`. String, sequence, and random
+ops stay unsupported: TensorRT has no equivalent operator.
 
 Graphs without those patterns are **copied** (plus `.onnx.data` sidecars). Output
 must be a different path than the input.
@@ -91,6 +99,25 @@ For `nvidia/GR00T-N1.7-ApplePnP-V1` as exported today:
 
 YAML (`exported_leapp.yaml`) is **not** copied by `rewrite-dir`. Copy it
 yourself if you need a full deploy tree.
+
+### List ONNX operators TensorRT does not support
+
+Prints the static parser table (onnx-tensorrt `operators.md`). No ONNX file
+and no Triton / ONNX Runtime install. This is the same table `check` uses
+when it marks an op unsupported.
+
+```bash
+isaac_deploy_trt unsupported-ops
+isaac_deploy_trt unsupported-ops --json
+isaac_deploy_trt unsupported-ops \
+  --catalog tensorrt_catalogs/v11.2/tensorrt_layers_cuda132_x86.json
+```
+
+Standalone script (same flags):
+
+```bash
+python scripts/list_unsupported_onnx_ops.py
+```
 
 ### Catalog-check ONNX (validate)
 

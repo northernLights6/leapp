@@ -20,6 +20,7 @@ from isaac_deploy_trt.pipeline_merge import (
     save_merged_pipeline,
 )
 from isaac_deploy_trt.prepare import rewrite_directory, rewrite_onnx_file
+from isaac_deploy_trt.unsupported_cmd import add_unsupported_arguments, run_unsupported
 from isaac_deploy_trt.validate import validate_onnx_for_tensorrt
 
 
@@ -145,7 +146,8 @@ def main(argv: list[str] | None = None) -> int:
             "GraphSurgeon ONNX rewrites for TensorRT: UINT8 intermediate Casts, "
             "Resize antialias, Reshape rank > 8. Graph I/O names are preserved. "
             "Merge a LEAPP YAML DAG into one ONNX graph for TensorRTNode. "
-            "Also join operators.md with NvInfer.h DataType/LayerType catalogs."
+            "Also join operators.md with NvInfer.h DataType/LayerType catalogs, "
+            "and list ONNX operators that catalog marks unsupported."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -202,6 +204,13 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--build", action="store_true", help="Also TensorRT parse/build")
     check.add_argument("--strict", action="store_true", help="Exit 1 if any check fails")
     check.set_defaults(handler=_cmd_check)
+
+    unsupported = sub.add_parser(
+        "unsupported-ops",
+        help="List ONNX operators the TensorRT parser catalog marks unsupported",
+    )
+    add_unsupported_arguments(unsupported)
+    unsupported.set_defaults(handler=run_unsupported)
 
     catalog = sub.add_parser(
         "catalog",

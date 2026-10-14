@@ -21,6 +21,10 @@ from isaac_deploy_trt.surgery import (
     load_graph,
     save_graph,
 )
+from isaac_deploy_trt.tensorrt_onnx_ops import (
+    BOOL_ONLY_SURGEON_OPS,
+    SURGEON_UNSUPPORTED_OPS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +37,24 @@ class RewriteFileResult:
     output_path: str = ""
 
 
+def _tensor_elem_type(model: onnx.ModelProto, name: str):
+    infos = list(model.graph.input) + list(model.graph.value_info) + list(model.graph.output)
+    for info in infos:
+        if info.name == name and info.type.HasField("tensor_type"):
+            return int(info.type.tensor_type.elem_type)
+    return None
+
+
 def needs_tensorrt_rewrite(model: onnx.ModelProto) -> bool:
     inits = {init.name: init for init in model.graph.initializer}
     for node in model.graph.node:
+        if node.op_type in BOOL_ONLY_SURGEON_OPS:
+            elem = _tensor_elem_type(model, node.input[0]) if node.input else None
+            if elem == 9:  # BOOL
+                return True
+            continue
+        if node.op_type in SURGEON_UNSUPPORTED_OPS:
+            return True
         if node.op_type == "Cast":
             to_attr = next((a.i for a in node.attribute if a.name == "to"), None)
             if to_attr == 2:
