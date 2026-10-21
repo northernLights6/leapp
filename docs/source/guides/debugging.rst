@@ -190,12 +190,16 @@ updates YAML checksums and ``parameters.tensorrt_compatible``.
 
    pip install -e ".[graph-surgery]"
    isaac_deploy_trt check --onnx path/to/model.onnx --strict
+   isaac_deploy_trt check --onnx path/to/model.onnx --tensorrt 10.16 --platform orin --strict
    isaac_deploy_trt check --onnx-dir path/to/export_dir --build --strict
-   isaac_deploy_trt rewrite-dir path/to/export_dir -o path/to/export_dir_trt
+   isaac_deploy_trt rewrite-dir path/to/export_dir -o path/to/export_dir_trt --tensorrt 10.16 --platform orin
    isaac_deploy_trt merge-pipeline path/to/export.yaml -o pipeline.onnx --rewrite
 
 ``--build`` also runs TensorRT parse/build (requires ``tensorrt``).
 ``--strict`` exits non-zero if catalog or TensorRT checks fail.
+``--tensorrt`` selects a release catalog such as ``10.16``; ``--platform``
+is ``x86``, ``orin``, ``thor``, or ``dgx``. Omitting both keeps the baked-in
+TensorRT 11.2 operator table.
 
 Set ``backend_params={"annotate_tensorrt_compatible": False}`` to omit the
 YAML field, or ``{"validate_tensorrt": True, "validate_tensorrt_build": True}``

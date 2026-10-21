@@ -58,6 +58,9 @@ pip install -e "./packages/isaac_deploy_trt[dev]"
 
 ```bash
 isaac_deploy_trt rewrite IN.onnx -o OUT.onnx
+
+# TensorRT 10.16, Jetson Orin catalog
+isaac_deploy_trt rewrite IN.onnx -o OUT.onnx --tensorrt 10.16 --platform orin
 ```
 
 Example (the only Apple PnP node that currently needs surgery):
@@ -76,8 +79,14 @@ hit the three patterns above are edited.
 `-o` **must not** be the input directory.
 
 ```bash
-isaac_deploy_trt rewrite-dir INPUT_DIR -o OUTPUT_DIR
+isaac_deploy_trt rewrite-dir INPUT_DIR -o OUTPUT_DIR --tensorrt 10.16 --platform orin
 ```
+
+``--tensorrt`` and ``--platform`` select the operator catalog, the same way
+they do for ``check``. Unsupported-op decomposition runs only for operators
+that catalog marks unsupported. UINT8 Cast, Resize antialias, and Reshape rank
+edits still run. ``--platform`` is ``x86`` (default), ``orin``, ``thor``, or
+``dgx``. Omitting both flags rewrites every operator that has a decomposition.
 
 GR00T Apple PnP LEAPP pack:
 
@@ -121,8 +130,12 @@ python scripts/list_unsupported_onnx_ops.py
 
 ### Catalog-check ONNX (validate)
 
-Static check: ops in the graph vs the baked-in TensorRT `operators.md` table.
-Does **not** rewrite files. Does **not** load `tensorrt_catalogs/*.json`.
+Static check: ops in the graph vs a TensorRT operator catalog.
+Does **not** rewrite files. With no version flag, the baked-in TensorRT 11.2
+`operators.md` table is used. `--tensorrt` loads that release from
+`tensorrt_catalogs/` (`10.16` and `v10.16` both work). `--platform` selects
+`x86` (default), `orin`, `thor`, or `dgx`. `--catalog` points at one JSON
+file and replaces the version flags.
 
 Does **not** catch UINT8 Cast / Resize antialias / rank-9 Reshape. Those only
 show up with TensorRT parse (`--build`) or `trtexec`.
@@ -139,6 +152,9 @@ isaac_deploy_trt check --onnx-dir DIR --strict
 
 # also TensorRT parse/build (needs TensorRT installed)
 isaac_deploy_trt check --onnx-dir DIR --build
+
+# TensorRT 10.16 catalog, Jetson Orin overlay
+isaac_deploy_trt check --onnx PATH.onnx --tensorrt 10.16 --platform orin --strict
 ```
 
 Examples:

@@ -235,7 +235,11 @@ def _conv_attrs(node: NodeLike) -> dict:
     return {key: node.attrs[key] for key in _CONV_ATTRS if key in node.attrs}
 
 
-def rewrite_bitwise_ops(graph: GraphLike) -> List[str]:
+def _selected(op: str, ops: Optional[Sequence[str]]) -> bool:
+    return ops is None or op in ops
+
+
+def rewrite_bitwise_ops(graph: GraphLike, ops: Optional[Sequence[str]] = None) -> List[str]:
     """Rewrite BOOL bitwise ops, and integer ``BitwiseNot``, into supported ops.
 
     ``BitwiseNot`` on integers is ``-1 - x`` (two's complement). Integer
@@ -243,6 +247,8 @@ def rewrite_bitwise_ops(graph: GraphLike) -> List[str]:
     """
     rewritten: List[str] = []
     for node in list(graph.nodes):
+        if not _selected(node.op, ops):
+            continue
         name = _node_name(node, f"{node.op}_{id(node)}")
         if node.op in _BOOL_BITWISE and node.inputs and all(_is_bool(t.dtype) for t in node.inputs):
             node.op = _BOOL_BITWISE[node.op]
@@ -319,11 +325,11 @@ def _rewrite_qlinear(graph: GraphLike, node: NodeLike, *, kind: str) -> bool:
     return _requantize(graph, name, conv_out, y_scale, y_zp, output)
 
 
-def rewrite_qlinear_ops(graph: GraphLike) -> List[str]:
+def rewrite_qlinear_ops(graph: GraphLike, ops: Optional[Sequence[str]] = None) -> List[str]:
     """Replace ``QLinearConv`` and ``QLinearMatMul`` with float Conv/MatMul."""
     rewritten: List[str] = []
     for node in list(graph.nodes):
-        if node.op not in ("QLinearConv", "QLinearMatMul"):
+        if node.op not in ("QLinearConv", "QLinearMatMul") or not _selected(node.op, ops):
             continue
         name = _node_name(node, node.op)
         if _rewrite_qlinear(graph, node, kind=node.op):
@@ -359,7 +365,7 @@ def _rewrite_integer_product(graph: GraphLike, node: NodeLike) -> bool:
     return True
 
 
-def rewrite_integer_conv_matmul(graph: GraphLike) -> List[str]:
+def rewrite_integer_conv_matmul(graph: GraphLike, ops: Optional[Sequence[str]] = None) -> List[str]:
     """Replace ``ConvInteger`` / ``MatMulInteger`` with a float product cast to INT32.
 
     The product is exact while the accumulator stays inside the FP32 mantissa
@@ -367,7 +373,7 @@ def rewrite_integer_conv_matmul(graph: GraphLike) -> List[str]:
     """
     rewritten: List[str] = []
     for node in list(graph.nodes):
-        if node.op not in ("ConvInteger", "MatMulInteger"):
+        if node.op not in ("ConvInteger", "MatMulInteger") or not _selected(node.op, ops):
             continue
         name = _node_name(node, node.op)
         if _rewrite_integer_product(graph, node):
@@ -375,7 +381,7 @@ def rewrite_integer_conv_matmul(graph: GraphLike) -> List[str]:
     return rewritten
 
 
-def rewrite_dynamic_quantize_linear(graph: GraphLike) -> List[str]:
+def rewrite_dynamic_quantize_linear(graph: GraphLike, ops: Optional[Sequence[str]] = None) -> List[str]:
     """Expand ``DynamicQuantizeLinear`` into ReduceMin/Max, Round, and Clip.
 
     TensorRT's parser rejects the fused op and documents this composition.
@@ -383,7 +389,7 @@ def rewrite_dynamic_quantize_linear(graph: GraphLike) -> List[str]:
     """
     rewritten: List[str] = []
     for node in list(graph.nodes):
-        if node.op != "DynamicQuantizeLinear" or len(node.outputs) < 3:
+        if node.op != "DynamicQuantizeLinear" or not _selected(node.op, ops) or len(node.outputs) < 3:
             continue
         name = _node_name(node, "DynamicQuantizeLinear")
         source = node.inputs[0]
@@ -444,11 +450,11 @@ def rewrite_dynamic_quantize_linear(graph: GraphLike) -> List[str]:
     return rewritten
 
 
-def rewrite_center_crop_pad(graph: GraphLike) -> List[str]:
+def rewrite_center_crop_pad(graph: GraphLike, ops: Optional[Sequence[str]] = None) -> List[str]:
     """Replace static ``CenterCropPad`` with Slice and Pad."""
     rewritten: List[str] = []
     for node in list(graph.nodes):
-        if node.op != "CenterCropPad" or len(node.inputs) < 2 or not node.outputs:
+        if node.op != "CenterCropPad" or not _selected(node.op, ops) or len(node.inputs) < 2 or not node.outputs:
             continue
         name = _node_name(node, "CenterCropPad")
         source = node.inputs[0]
@@ -520,14 +526,21 @@ def rewrite_center_crop_pad(graph: GraphLike) -> List[str]:
     return rewritten
 
 
-def rewrite_unsupported_onnx_ops(graph: GraphLike) -> List[str]:
-    """Rewrite TensorRT-unsupported ops that have a supported decomposition."""
+def rewrite_unsupported_onnx_ops(
+    graph: GraphLike,
+    ops: Optional[Sequence[str]] = None,
+) -> List[str]:
+    """Rewrite TensorRT-unsupported ops that have a supported decomposition.
+
+    ``ops`` limits the rewrite to those operator names. ``None`` rewrites every
+    operator that has a decomposition.
+    """
     rewritten: List[str] = []
-    rewritten.extend(rewrite_bitwise_ops(graph))
-    rewritten.extend(rewrite_qlinear_ops(graph))
-    rewritten.extend(rewrite_integer_conv_matmul(graph))
-    rewritten.extend(rewrite_dynamic_quantize_linear(graph))
-    rewritten.extend(rewrite_center_crop_pad(graph))
+    rewritten.extend(rewrite_bitwise_ops(graph, ops))
+    rewritten.extend(rewrite_qlinear_ops(graph, ops))
+    rewritten.extend(rewrite_integer_conv_matmul(graph, ops))
+    rewritten.extend(rewrite_dynamic_quantize_linear(graph, ops))
+    rewritten.extend(rewrite_center_crop_pad(graph, ops))
     if rewritten:
         logger.info("Rewrote TensorRT-unsupported ops: %s", rewritten)
     return rewritten

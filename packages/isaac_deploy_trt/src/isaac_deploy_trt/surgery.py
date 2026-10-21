@@ -590,12 +590,17 @@ def reduce_reshape_rank_for_tensorrt(
     return rewritten
 
 
-def apply_tensorrt_rewrites(graph: GraphLike) -> List[str]:
-    """Run all TensorRT GraphSurgeon rewrites. Returns names of edited nodes."""
+def apply_tensorrt_rewrites(graph: GraphLike, surgeon_ops: Optional[Sequence[str]] = None) -> List[str]:
+    """Run all TensorRT GraphSurgeon rewrites. Returns names of edited nodes.
+
+    ``surgeon_ops`` limits unsupported-op decomposition to that catalog subset.
+    ``None`` rewrites every operator that has a decomposition. UINT8 Cast,
+    Resize antialias, and Reshape rank edits always run.
+    """
     from isaac_deploy_trt.unsupported_surgery import rewrite_unsupported_onnx_ops
 
     rewritten: List[str] = []
-    rewritten.extend(rewrite_unsupported_onnx_ops(graph))
+    rewritten.extend(rewrite_unsupported_onnx_ops(graph, ops=surgeon_ops))
     rewritten.extend(rewrite_uint8_intermediate_casts(graph))
     rewritten.extend(disable_resize_antialias(graph))
     rewritten.extend(reduce_reshape_rank_for_tensorrt(graph))

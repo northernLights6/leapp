@@ -28,21 +28,55 @@ def _add_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 
 
+def _add_target_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--tensorrt",
+        default=None,
+        help=(
+            "TensorRT release for the operator catalog (for example 10.16 or 11.2). "
+            "Unsupported-op rewrites follow that catalog. "
+            "Default: rewrite every operator that has a decomposition."
+        ),
+    )
+    parser.add_argument(
+        "--platform",
+        default=None,
+        help=(
+            "Platform overlay when selecting a tensorrt_catalogs file: "
+            "x86, orin, thor, or dgx. Default: x86."
+        ),
+    )
+
+
+def _rewrite_kwargs(args: argparse.Namespace) -> dict:
+    return {"tensorrt": args.tensorrt, "platform": args.platform}
+
+
 def _cmd_rewrite(args: argparse.Namespace) -> int:
-    result = rewrite_onnx_file(args.onnx, args.output)
+    try:
+        result = rewrite_onnx_file(args.onnx, args.output, **_rewrite_kwargs(args))
+    except (KeyError, ValueError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     action = "rewrote" if result.rewritten else "copied"
     extra = f" ({len(result.rewritten_nodes)} nodes)" if result.rewritten else ""
-    print(f"{action} {result.filename}{extra} -> {result.output_path}")
+    suffix = f"  [{result.catalog_path}]" if result.catalog_path else ""
+    print(f"{action} {result.filename}{extra} -> {result.output_path}{suffix}")
     return 0
 
 
 def _cmd_rewrite_dir(args: argparse.Namespace) -> int:
-    results = rewrite_directory(args.input_dir, args.output)
+    try:
+        results = rewrite_directory(args.input_dir, args.output, **_rewrite_kwargs(args))
+    except (KeyError, ValueError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     print(f"Wrote {len(results)} ONNX file(s) to {os.path.abspath(args.output)}")
     for item in results:
         action = "rewrote" if item.rewritten else "copied"
         extra = f" ({len(item.rewritten_nodes)} nodes)" if item.rewritten else ""
-        print(f"  {action} {item.filename}{extra}")
+        suffix = f"  [{item.catalog_path}]" if item.catalog_path else ""
+        print(f"  {action} {item.filename}{extra}{suffix}")
     return 0
 
 
@@ -75,6 +109,12 @@ def _cmd_merge_pipeline(args: argparse.Namespace) -> int:
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
+    if args.catalog and (args.tensorrt or args.platform or args.cuda):
+        print(
+            "error: --catalog replaces --tensorrt, --platform, and --cuda",
+            file=sys.stderr,
+        )
+        return 2
     paths = [args.onnx] if args.onnx else []
     if args.onnx_dir:
         for name in sorted(os.listdir(args.onnx_dir)):
@@ -82,13 +122,22 @@ def _cmd_check(args: argparse.Namespace) -> int:
                 paths.append(os.path.join(args.onnx_dir, name))
     failed = 0
     for path in paths:
-        result = validate_onnx_for_tensorrt(
-            path,
-            build=args.build,
-            strict=False,
-        )
+        try:
+            result = validate_onnx_for_tensorrt(
+                path,
+                build=args.build,
+                strict=False,
+                tensorrt=args.tensorrt,
+                cuda=args.cuda,
+                platform=args.platform,
+                catalog=args.catalog,
+            )
+        except (KeyError, ValueError, FileNotFoundError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         status = "ok" if result.ok else "FAIL"
-        print(f"{status}  {path}")
+        suffix = f"  [{result.catalog_path}]" if result.catalog_path else ""
+        print(f"{status}  {path}{suffix}")
         if not result.ok:
             failed += 1
             for err in result.errors:
@@ -155,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     rewrite = sub.add_parser("rewrite", help="Rewrite one ONNX file")
     rewrite.add_argument("onnx", help="Input .onnx path")
     rewrite.add_argument("-o", "--output", required=True, help="Output .onnx path")
+    _add_target_arguments(rewrite)
     rewrite.set_defaults(handler=_cmd_rewrite)
 
     rewrite_dir = sub.add_parser(
@@ -162,6 +212,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     rewrite_dir.add_argument("input_dir", help="Directory of .onnx files")
     rewrite_dir.add_argument("-o", "--output", required=True, help="Output directory")
+    _add_target_arguments(rewrite_dir)
     rewrite_dir.set_defaults(handler=_cmd_rewrite_dir)
 
     merge = sub.add_parser(
@@ -203,6 +254,32 @@ def main(argv: list[str] | None = None) -> int:
     src.add_argument("--onnx-dir", help="Directory of .onnx files")
     check.add_argument("--build", action="store_true", help="Also TensorRT parse/build")
     check.add_argument("--strict", action="store_true", help="Exit 1 if any check fails")
+    check.add_argument(
+        "--tensorrt",
+        default=None,
+        help=(
+            "TensorRT release for the operator catalog (for example 10.16 or 11.2). "
+            "Default: baked-in 11.2 parser table. Other releases load tensorrt_catalogs."
+        ),
+    )
+    check.add_argument(
+        "--platform",
+        default=None,
+        help=(
+            "Platform overlay when selecting a tensorrt_catalogs file: "
+            "x86, orin, thor, or dgx. Default: x86."
+        ),
+    )
+    check.add_argument(
+        "--cuda",
+        default=None,
+        help="CUDA version used to pick a catalog (for example 13.2).",
+    )
+    check.add_argument(
+        "--catalog",
+        default=None,
+        help="Platform catalog JSON. Replaces --tensorrt, --platform, and --cuda.",
+    )
     check.set_defaults(handler=_cmd_check)
 
     unsupported = sub.add_parser(
