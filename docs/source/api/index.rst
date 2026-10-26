@@ -228,11 +228,15 @@ Signature
 Parameters
 ~~~~~~~~~~
 
-* ``trt_compatible`` (bool, optional): Rewrite exported ONNX files in the
-  graph output directory so TensorRT can parse them (UINT8 intermediate
-  Casts, Resize ``antialias``, rank-9 Reshape). Updates YAML checksums and
-  ``parameters.tensorrt_compatible``. Graph I/O names, dtypes, and shapes
-  are unchanged. Requires ``isaac_deploy_trt``. Defaults to ``False``.
+* ``trt_compatible`` (bool, optional): Optimize exported ONNX files in the
+  graph output directory so TensorRT can parse them. Always edits UINT8
+  intermediate Casts, Resize ``antialias``, and rank-9 Reshape. Also
+  decomposes operators the minimal TensorRT catalog marks unsupported.
+  That catalog is the intersection of every checked-in release and platform
+  (``tensorrt_catalogs/minimal/tensorrt_layers.json``). Updates YAML
+  checksums and ``parameters.tensorrt_compatible``. Graph I/O names, dtypes,
+  and shapes are unchanged. Requires ``isaac_deploy_trt``. Defaults to
+  ``False``.
 
 Behavior
 ~~~~~~~~

@@ -5,14 +5,14 @@
 
 """LEAPP command-line entry point.
 
-TensorRT ONNX rewrite, catalog check, and pipeline merge live in the sibling
+TensorRT ONNX optimize, catalog check, and pipeline merge live in the sibling
 ``isaac_deploy_trt`` package::
 
     pip install -e ./packages/isaac_deploy_trt
     isaac_deploy_trt check --onnx model.onnx --strict
     isaac_deploy_trt check --onnx-dir ./exported_graph --build --strict
-    isaac_deploy_trt rewrite-dir ./exported_graph -o ./exported_graph_trt
-    isaac_deploy_trt merge-pipeline exported.yaml -o pipeline.onnx --rewrite
+    isaac_deploy_trt optimize-dir ./exported_graph -o ./exported_graph_trt
+    isaac_deploy_trt merge-pipeline exported.yaml -o pipeline.onnx --optimize
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ _MOVED = """TensorRT ONNX tools moved to isaac_deploy_trt.
   pip install -e ./packages/isaac_deploy_trt
   isaac_deploy_trt check --onnx MODEL.onnx [--build] [--strict]
   isaac_deploy_trt check --onnx-dir EXPORT_DIR [--build] [--strict]
-  isaac_deploy_trt rewrite-dir INPUT_DIR -o OUTPUT_DIR
-  isaac_deploy_trt merge-pipeline EXPORTED.yaml -o pipeline.onnx [--rewrite]
+  isaac_deploy_trt optimize-dir INPUT_DIR -o OUTPUT_DIR
+  isaac_deploy_trt merge-pipeline EXPORTED.yaml -o pipeline.onnx [--optimize]
 """
 
 

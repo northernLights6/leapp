@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "isaac_deploy_trt"
 version = "0.1.0"
-description = "GraphSurgeon ONNX rewrites to make models TensorRT-parseable"
+description = "GraphSurgeon ONNX optimizations to make models TensorRT-parseable"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"

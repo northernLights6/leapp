@@ -56,11 +56,10 @@ def surgeon_ops_for_target(
 ) -> Tuple[Optional[frozenset], Optional[str]]:
     """Return surgeon ops the selected catalog marks unsupported, plus its path.
 
-    ``(None, None)`` keeps the full decomposition set used when no TensorRT
-    release is requested.
+    No TensorRT release selects the minimal catalog: an operator is decomposed
+    only when it is unsupported in every checked-in TensorRT catalog and a
+    GraphSurgeon rewrite exists. ``--platform`` applies only with ``--tensorrt``.
     """
-    if tensorrt is None and platform is None and cuda is None and catalog is None:
-        return None, None
     ops_map, catalog_path = select_onnx_ops(
         tensorrt=tensorrt,
         cuda=cuda,

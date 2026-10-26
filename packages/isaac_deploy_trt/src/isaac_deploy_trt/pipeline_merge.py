@@ -29,7 +29,7 @@ import onnx
 import yaml
 from onnx import compose, helper
 
-from isaac_deploy_trt.prepare import needs_tensorrt_rewrite
+from isaac_deploy_trt.prepare import needs_tensorrt_rewrite, surgeon_ops_for_target
 from isaac_deploy_trt.surgery import rewrite_onnx_for_tensorrt
 
 logger = logging.getLogger(__name__)
@@ -174,15 +174,16 @@ def merge_leapp_onnx_pipeline(
     yaml_path: str,
     *,
     model_dir: Optional[str] = None,
-    rewrite: bool = False,
+    optimize: bool = False,
 ) -> MergedPipelineResult:
     """Build one ONNX graph from a LEAPP export YAML and sibling ``.onnx`` files.
 
     ``model_dir`` defaults to the YAML's directory. Relative ``parameters.model_path``
     values are resolved against that directory.
 
-    If ``rewrite`` is true, apply TensorRT GraphSurgeon edits (UINT8 Cast,
-    Resize antialias, rank>8 Reshape) to each subgraph before inlining.
+    If ``optimize`` is true, apply TensorRT GraphSurgeon edits (UINT8 Cast,
+    Resize antialias, rank>8 Reshape, and operators the minimal catalog marks
+    unsupported) to each subgraph before inlining.
     """
     yaml_path = os.path.abspath(yaml_path)
     model_dir = os.path.abspath(model_dir or os.path.dirname(yaml_path))
@@ -206,6 +207,9 @@ def merge_leapp_onnx_pipeline(
     ir_version = 0
     external_data_sources: Dict[str, str] = {}
     rewritten_models: List[str] = []
+    surgeon_ops = None
+    if optimize:
+        surgeon_ops, _catalog = surgeon_ops_for_target()
     for name, cfg in models_cfg.items():
         rel = ((cfg or {}).get("parameters") or {}).get("model_path", "")
         if not rel:
@@ -215,9 +219,9 @@ def merge_leapp_onnx_pipeline(
             raise FileNotFoundError(f"ONNX for model {name!r} not found: {path}")
         logger.info("Loading %s from %s", name, path)
         raw = _load_model(path)
-        if rewrite and needs_tensorrt_rewrite(raw):
-            logger.info("Rewriting %s for TensorRT before merge", name)
-            raw = rewrite_onnx_for_tensorrt(raw)
+        if optimize and needs_tensorrt_rewrite(raw, surgeon_ops=surgeon_ops):
+            logger.info("Optimizing %s for TensorRT before merge", name)
+            raw = rewrite_onnx_for_tensorrt(raw, surgeon_ops=surgeon_ops)
             rewritten_models.append(name)
         for location in _external_locations(raw):
             source = os.path.abspath(os.path.join(os.path.dirname(path), location))

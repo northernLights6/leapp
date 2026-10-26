@@ -23,7 +23,7 @@ from typing import Dict, List, Optional
 import onnx
 import yaml
 
-from isaac_deploy_trt.prepare import needs_tensorrt_rewrite
+from isaac_deploy_trt.prepare import needs_tensorrt_rewrite, surgeon_ops_for_target
 from isaac_deploy_trt.surgery import (
     apply_tensorrt_rewrites,
     export_model,
@@ -201,6 +201,7 @@ def align_leapp_export_for_tensorrt(
     result = AlignedBundleResult(output_dir=output_dir)
     hashes: Dict[str, tuple[str, str]] = {}
     trt_compatible: Dict[str, bool] = {}
+    surgeon_ops, _catalog = surgeon_ops_for_target()
 
     for src in onnx_files:
         filename = os.path.basename(src)
@@ -208,13 +209,13 @@ def align_leapp_export_for_tensorrt(
         source_model = onnx.load(src, load_external_data=False)
         source_io = graph_io_signature(source_model)
 
-        if not needs_tensorrt_rewrite(source_model):
+        if not needs_tensorrt_rewrite(source_model, surgeon_ops=surgeon_ops):
             _copy_with_external_data(src, dst)
             logger.info(f"Copied {filename} (already TensorRT-aligned I/O)")
             rewritten_nodes: List[str] = []
         else:
             graph = load_graph(src)
-            rewritten_nodes = apply_tensorrt_rewrites(graph)
+            rewritten_nodes = apply_tensorrt_rewrites(graph, surgeon_ops=surgeon_ops)
             _save_rewritten(graph, src, dst)
             aligned = onnx.load(dst, load_external_data=False)
             aligned_io = graph_io_signature(aligned)

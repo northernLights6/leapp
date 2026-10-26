@@ -1,6 +1,6 @@
 # isaac_deploy_trt
 
-Standalone GraphSurgeon toolkit that applies the same TensorRT ONNX rewrites
+Standalone GraphSurgeon toolkit that applies the same TensorRT ONNX optimizations
 used in LEAPP, without depending on LEAPP export/tracing.
 
 Given an ONNX file (or a directory of them), it:
@@ -54,24 +54,24 @@ pip install -e "./packages/isaac_deploy_trt[dev]"
 
 ## Commands
 
-### Rewrite one file
+### Optimize one file
 
 ```bash
-isaac_deploy_trt rewrite IN.onnx -o OUT.onnx
+isaac_deploy_trt optimize IN.onnx -o OUT.onnx
 
 # TensorRT 10.16, Jetson Orin catalog
-isaac_deploy_trt rewrite IN.onnx -o OUT.onnx --tensorrt 10.16 --platform orin
+isaac_deploy_trt optimize IN.onnx -o OUT.onnx --tensorrt 10.16 --platform orin
 ```
 
 Example (the only Apple PnP node that currently needs surgery):
 
 ```bash
-isaac_deploy_trt rewrite \
+isaac_deploy_trt optimize \
   /mnt/sdb2/workspaces/leapp/gr00t-leapp-export/apple_pnp_onnx/preprocess_video.onnx \
   -o /mnt/sdb2/workspaces/leapp/gr00t-leapp-export/apple_pnp_onnx_surgeon/preprocess_video.onnx
 ```
 
-### Rewrite a directory into another folder
+### Optimize a directory into another folder
 
 Copies every `*.onnx` (and matching `.onnx.data`) into `-o`. Only graphs that
 hit the three patterns above are edited.
@@ -79,19 +79,21 @@ hit the three patterns above are edited.
 `-o` **must not** be the input directory.
 
 ```bash
-isaac_deploy_trt rewrite-dir INPUT_DIR -o OUTPUT_DIR --tensorrt 10.16 --platform orin
+isaac_deploy_trt optimize-dir INPUT_DIR -o OUTPUT_DIR --tensorrt 10.16 --platform orin
 ```
 
 ``--tensorrt`` and ``--platform`` select the operator catalog, the same way
 they do for ``check``. Unsupported-op decomposition runs only for operators
 that catalog marks unsupported. UINT8 Cast, Resize antialias, and Reshape rank
-edits still run. ``--platform`` is ``x86`` (default), ``orin``, ``thor``, or
-``dgx``. Omitting both flags rewrites every operator that has a decomposition.
+edits still run. ``--platform`` is ``x86``, ``orin``, ``thor``, or ``dgx``, and applies with ``--tensorrt``.
+Omitting ``--tensorrt`` uses the minimal catalog, the operators unsupported
+on every checked-in TensorRT release. ``merge-pipeline --optimize`` uses that
+same default.
 
 GR00T Apple PnP LEAPP pack:
 
 ```bash
-isaac_deploy_trt rewrite-dir \
+isaac_deploy_trt optimize-dir \
   /mnt/sdb2/workspaces/leapp/gr00t-leapp-export/apple_pnp_onnx \
   -o /mnt/sdb2/workspaces/leapp/gr00t-leapp-export/apple_pnp_onnx_surgeon
 ```
@@ -100,20 +102,21 @@ For `nvidia/GR00T-N1.7-ApplePnP-V1` as exported today:
 
 | File | Surgeon |
 |---|---|
-| `preprocess_video.onnx` | rewrite (UINT8 Cast, Resize antialias, rank-9 Reshape) |
+| `preprocess_video.onnx` | optimize (UINT8 Cast, Resize antialias, rank-9 Reshape) |
 | `preprocess_state.onnx` | copy |
 | `backbone.onnx` | copy |
 | `action_head.onnx` | copy |
 | `decode_action.onnx` | copy |
 
-YAML (`exported_leapp.yaml`) is **not** copied by `rewrite-dir`. Copy it
+YAML (`exported_leapp.yaml`) is **not** copied by `optimize-dir`. Copy it
 yourself if you need a full deploy tree.
 
 ### List ONNX operators TensorRT does not support
 
 Prints the static parser table (onnx-tensorrt `operators.md`). No ONNX file
-and no Triton / ONNX Runtime install. This is the same table `check` uses
-when it marks an op unsupported.
+and no Triton / ONNX Runtime install. With no flags this is the TensorRT 11.2
+table. `check`, `optimize`, and `merge-pipeline --optimize` use the minimal
+catalog unless `--tensorrt` or `--catalog` is set.
 
 ```bash
 isaac_deploy_trt unsupported-ops
@@ -131,10 +134,11 @@ python scripts/list_unsupported_onnx_ops.py
 ### Catalog-check ONNX (validate)
 
 Static check: ops in the graph vs a TensorRT operator catalog.
-Does **not** rewrite files. With no version flag, the baked-in TensorRT 11.2
-`operators.md` table is used. `--tensorrt` loads that release from
+Does **not** optimize files. With no version flag, the minimal catalog is used:
+an operator counts as supported only when every checked-in TensorRT release
+marks it supported. `--tensorrt` loads that release from
 `tensorrt_catalogs/` (`10.16` and `v10.16` both work). `--platform` selects
-`x86` (default), `orin`, `thor`, or `dgx`. `--catalog` points at one JSON
+`x86`, `orin`, `thor`, or `dgx` for that release. `--catalog` points at one JSON
 file and replaces the version flags.
 
 Does **not** catch UINT8 Cast / Resize antialias / rank-9 Reshape. Those only
@@ -182,8 +186,10 @@ merged protobuf (does not load the 6 GB GR00T backbone into RAM).
 isaac_deploy_trt merge-pipeline EXPORTED.yaml -o pipeline.onnx
 ```
 
-``--rewrite`` applies the GraphSurgeon TensorRT edits to each subgraph before
-merge (needed if you have not already run ``rewrite-dir``).
+``--optimize`` applies the GraphSurgeon TensorRT edits to each subgraph before
+merge (needed if you have not already run ``optimize-dir``). With no
+``--tensorrt`` flag it uses the minimal catalog, the same default as
+``check`` and ``optimize``.
 
 ``--model-dir`` defaults to the YAML directory. ``--yaml-out`` overrides the
 sibling ``pipeline.yaml`` (TensorRTNode ``input_tensor_names`` /
@@ -192,7 +198,7 @@ sibling ``pipeline.yaml`` (TensorRTNode ``input_tensor_names`` /
 Standalone script (same flags after the YAML path):
 
 ```bash
-python scripts/merge_pipeline.py EXPORTED.yaml -o pipeline.onnx --rewrite
+python scripts/merge_pipeline.py EXPORTED.yaml -o pipeline.onnx --optimize
 ```
 
 GR00T Apple PnP (rewritten video preprocess + merge):
@@ -202,7 +208,7 @@ isaac_deploy_trt merge-pipeline \
   /mnt/sdb2/workspaces/leapp/gr00t-leapp-export/apple_pnp_onnx/exported_leapp.yaml \
   --model-dir /mnt/sdb2/workspaces/leapp/gr00t-leapp-export/apple_pnp_onnx \
   -o /mnt/sdb2/workspaces/leapp/gr00t-leapp-export/apple_pnp_pipeline/pipeline.onnx \
-  --rewrite
+  --optimize
 ```
 
 Then build the engine on the target GPU:
@@ -258,12 +264,31 @@ isaac_deploy_trt generate -o tensorrt_catalogs --print-summary \
 Checked-in databases live in [`tensorrt_catalogs/`](tensorrt_catalogs/index.json).
 Look up a GitHub tag in `release_to_database`, then open that directory.
 
+Each database is one JSON object per platform. Native layers are
+`tensorrt_layers` (`gpu`, `dla`, `notes`). ONNX parser ops are
+`onnx_operators` (`supported`, `types`, `restrictions`).
+
+The minimal catalog is `tensorrt_catalogs/minimal/tensorrt_layers.json`.
+It is the default for `check`, `optimize`, `optimize-dir`, and
+`merge-pipeline --optimize` when `--tensorrt` is omitted, and for
+`leapp.optimize_graph(trt_compatible=True)`. A native layer is included
+only when every checked-in catalog sets `gpu: true`. `onnx_operators` is
+the same intersection: an operator is supported only when every catalog
+marks it supported.
+
+```bash
+isaac_deploy_trt minimal-layers
+isaac_deploy_trt minimal-layers -o tensorrt_catalogs/minimal/tensorrt_layers.json
+```
+
 There are no public `v11.3` / `v11.4` tags. Latest OSS 11.x tags are `v11.0`,
 `v11.1`, `v11.2`.
 
 ---
 
 ## Python
+
+These helpers are what `optimize` and `optimize-dir` call.
 
 ```python
 from isaac_deploy_trt import rewrite_onnx_file, rewrite_directory

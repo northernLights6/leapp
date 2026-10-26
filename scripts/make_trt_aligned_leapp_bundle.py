@@ -7,7 +7,7 @@
 """Write a LEAPP export dir with TensorRT-legal ONNX under the original names.
 
 Isaac Deploy / Triton look up ``preprocess_video.onnx``, ``backbone.onnx``,
-etc. next to the YAML. This copies that layout and only rewrites graphs that
+etc. next to the YAML. This copies that layout and only optimizes graphs that
 need GraphSurgeon (UINT8 Cast, Resize antialias, rank-9 Reshape). Checksums
 in the YAML are updated. Graph I/O names/shapes/dtypes are unchanged.
 
@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     result = align_leapp_export_for_tensorrt(args.export_dir, args.output)
     print(f"Wrote aligned TensorRT LEAPP bundle to {result.output_dir}")
     for model in result.models:
-        action = "rewrote" if model.rewritten else "copied"
+        action = "optimized" if model.rewritten else "copied"
         extra = f" ({len(model.rewritten_nodes)} nodes)" if model.rewritten else ""
         print(f"  {action} {model.filename}{extra}")
     return 0

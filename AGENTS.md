@@ -21,7 +21,7 @@ Python 3.10+ and PyTorch 2.6.0+. Visualization extras install only on
 | Warp tracing (`TracedWpArray`, APIC, `warp_op`) | `warp_support.md` |
 | Public annotate/lifecycle API or docs examples | `docs/source/api/index.rst` plus the matching guide under `docs/source/` |
 | Graph PNG layout | `packages/leapp-visualization/` |
-| TensorRT ONNX rewrite / catalog / pipeline merge | `packages/isaac_deploy_trt/` |
+| TensorRT ONNX optimize / catalog / pipeline merge | `packages/isaac_deploy_trt/` |
 | Export backends | `leapp/backends/` |
 | YAML / `InferenceManager` | `leapp/leapp.py` (`compile_graph`, `optimize_graph`), `leapp/inference_manager.py`, `docs/source/generated_configs.rst` |
 
@@ -42,7 +42,7 @@ leapp/                      # installable package
     datatypes/              # TracedData, TracedTensor, TracedNpArray, TracedWpArray
   utils/                    # logging, TensorSemantics, enums, GraphConfigs
 packages/leapp-visualization/   # static PNG layout (ships with leapp)
-packages/isaac_deploy_trt/      # TensorRT ONNX rewrite, catalogs, merge-pipeline
+packages/isaac_deploy_trt/      # TensorRT ONNX optimize, catalogs, merge-pipeline
 docs/source/                # Sphinx (NVIDIA theme)
 examples/                   # runnable samples; CI runs tests/test_examples/
 tests/
@@ -69,7 +69,7 @@ annotation APIs such as `method()`, `input_tensors()`, and
 ```bash
 python -m pip install -e ".[dev,test,warp-cu12]"  # CUDA 12
 python -m pip install -e ".[dev,test,warp-cu13]"  # CUDA 13
-python -m pip install -e ".[dev,graph-surgery]"   # TensorRT ONNX rewrite extras
+python -m pip install -e ".[dev,graph-surgery]"   # TensorRT ONNX optimize extras
 pytest tests/ packages/leapp-visualization/tests/ packages/isaac_deploy_trt/tests/ -v
 ```
 
@@ -82,7 +82,7 @@ Narrower (use these while iterating):
 | Annotate / I/O / state | `pytest tests/functional_tests/ -v` |
 | Examples | `pytest tests/test_examples/ -v` |
 | Visualization | `pytest packages/leapp-visualization/tests/ -v` (Python 3.11+) |
-| TensorRT rewrite / catalogs | `pytest packages/isaac_deploy_trt/tests/ tests/unit_tests/test_optimize_graph.py tests/unit_tests/test_tensorrt_leapp_bundle.py -v` |
+| TensorRT optimize / catalogs | `pytest packages/isaac_deploy_trt/tests/ tests/unit_tests/test_optimize_graph.py tests/unit_tests/test_tensorrt_leapp_bundle.py -v` |
 | Warp tracing | see `warp_support.md` |
 
 ### Warp runtime build
@@ -152,7 +152,7 @@ diff (`git diff origin/main...HEAD`) is the true delta.
 | `guides/export.rst` | Backends and `export_with` |
 | `guides/graph.rst` | State, `annotate.module`, feedback |
 | `guides/buffers.rst` | `static_outputs`, `mirror_leapp_tags` |
-| `guides/debugging.rst` | Validation, logs, dry_run, `non_traced`, TensorRT rewrite |
+| `guides/debugging.rst` | Validation, logs, dry_run, `non_traced`, TensorRT optimize |
 | `leapp_runtime.rst` | `InferenceManager` |
 | `semantics/` | `TensorSemantics`, kinds, `TemporalAxis` |
 | `generated_configs.rst` | YAML shape |
@@ -160,12 +160,16 @@ diff (`git diff origin/main...HEAD`) is the true delta.
 
 User-facing integration recipes belong here, not in this file.
 
-TensorRT GraphSurgeon rewrites, op catalogs, and LEAPP DAG merge live in
+TensorRT GraphSurgeon optimizations, op catalogs, and LEAPP DAG merge live in
 `packages/isaac_deploy_trt`. After `compile_graph()`,
-`optimize_graph(trt_compatible=True)` rewrites ONNX in the graph directory
-and updates YAML checksums / `parameters.tensorrt_compatible`. Merge a DAG
+`optimize_graph(trt_compatible=True)` optimizes ONNX in the graph directory
+and updates YAML checksums / `parameters.tensorrt_compatible`. When
+`--tensorrt` is omitted, `check`, `optimize`, `merge-pipeline --optimize`,
+and that optimize pass use the minimal catalog
+(`tensorrt_catalogs/minimal/tensorrt_layers.json`): operators and native
+layers supported by every checked-in release and platform. Merge a DAG
 for one Isaac `TensorRTNode` with
-`isaac_deploy_trt merge-pipeline exported.yaml -o pipeline.onnx --rewrite`.
+`isaac_deploy_trt merge-pipeline exported.yaml -o pipeline.onnx --optimize`.
 
 ## Guardrails when changing behavior
 

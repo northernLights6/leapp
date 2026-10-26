@@ -177,14 +177,27 @@ LEAPP patches for the tracing session (for example NumPy and torch
 interop). Use this only to test whether those patches are involved in
 a failure.
 
-TensorRT catalog and rewrite
-============================
+TensorRT catalog and optimize
+==============================
 
-TensorRT op-catalog checks, GraphSurgeon rewrites, and DAG merge live in
+TensorRT op-catalog checks, GraphSurgeon optimizations, and DAG merge live in
 the in-tree ``isaac_deploy_trt`` package (also the ``graph-surgery`` extra),
-not in the LEAPP tracing CLI. After ``compile_graph()``, rewrite exported
+not in the LEAPP tracing CLI. After ``compile_graph()``, optimize exported
 ONNX in place with ``leapp.optimize_graph(trt_compatible=True)``. That
 updates YAML checksums and ``parameters.tensorrt_compatible``.
+
+With no ``--tensorrt`` flag, ``check``, ``optimize``, ``optimize-dir``, and
+``merge-pipeline --optimize`` use the minimal catalog,
+``tensorrt_catalogs/minimal/tensorrt_layers.json``. An ONNX operator or
+native layer counts as supported only when every checked-in TensorRT release
+and platform marks it supported. ``leapp.optimize_graph(trt_compatible=True)``
+uses that catalog for unsupported-operator optimizations. UINT8 intermediate
+Casts, Resize ``antialias``, and rank-9 Reshape edits always run.
+
+``--tensorrt`` selects one release, for example ``10.16``. ``--platform``
+(``x86``, ``orin``, ``thor``, or ``dgx``) applies only together with
+``--tensorrt``. ``--tensorrt 11.2`` with no platform uses the built-in 11.2
+parser table. ``--catalog`` replaces those flags with one JSON file.
 
 .. code-block:: bash
 
@@ -192,15 +205,14 @@ updates YAML checksums and ``parameters.tensorrt_compatible``.
    isaac_deploy_trt check --onnx path/to/model.onnx --strict
    isaac_deploy_trt check --onnx path/to/model.onnx --tensorrt 10.16 --platform orin --strict
    isaac_deploy_trt check --onnx-dir path/to/export_dir --build --strict
-   isaac_deploy_trt rewrite-dir path/to/export_dir -o path/to/export_dir_trt --tensorrt 10.16 --platform orin
-   isaac_deploy_trt merge-pipeline path/to/export.yaml -o pipeline.onnx --rewrite
+   isaac_deploy_trt optimize-dir path/to/export_dir -o path/to/export_dir_trt
+   isaac_deploy_trt optimize-dir path/to/export_dir -o path/to/export_dir_trt --tensorrt 10.16 --platform orin
+   isaac_deploy_trt merge-pipeline path/to/export.yaml -o pipeline.onnx --optimize
 
 ``--build`` also runs TensorRT parse/build (requires ``tensorrt``).
 ``--strict`` exits non-zero if catalog or TensorRT checks fail.
-``--tensorrt`` selects a release catalog such as ``10.16``; ``--platform``
-is ``x86``, ``orin``, ``thor``, or ``dgx``. Omitting both keeps the baked-in
-TensorRT 11.2 operator table.
 
-Set ``backend_params={"annotate_tensorrt_compatible": False}`` to omit the
-YAML field, or ``{"validate_tensorrt": True, "validate_tensorrt_build": True}``
+The YAML field ``parameters.tensorrt_compatible`` uses the same minimal
+catalog. Set ``backend_params={"annotate_tensorrt_compatible": False}`` to
+omit it, or ``{"validate_tensorrt": True, "validate_tensorrt_build": True}``
 to require a TensorRT parse/build before marking ``true``.

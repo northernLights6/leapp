@@ -158,15 +158,25 @@ def select_onnx_ops(
 ) -> tuple[Dict[str, dict], Optional[str]]:
     """Return ``(operator map, catalog path)``.
 
-    The baked-in parser table is used when no version, platform, or catalog
-    file is requested, and when ``--tensorrt`` names that table (currently
-    11.2) without a platform overlay. Any other release is loaded from
-    ``tensorrt_catalogs``.
+    With no TensorRT version and no catalog file, the minimal catalog is used:
+    an operator counts as supported only when every checked-in release and
+    platform marks it supported. ``--tensorrt 11.2`` without a platform still
+    uses the baked-in 11.2 parser table. Any other release is loaded from
+    ``tensorrt_catalogs``. ``--platform`` and ``--cuda`` apply only together
+    with ``--tensorrt``.
     """
     if catalog:
         path = Path(catalog).expanduser().resolve()
         if not path.is_file():
             raise FileNotFoundError(f"Catalog not found: {path}")
+        return _ops_from_catalog_file(path), str(path)
+
+    if tensorrt is None:
+        from isaac_deploy_trt.minimal_layers import minimal_catalog_path
+
+        path = minimal_catalog_path()
+        if not path.is_file():
+            raise FileNotFoundError(f"Minimal TensorRT catalog not found: {path}")
         return _ops_from_catalog_file(path), str(path)
 
     if platform is None and catalog is None:

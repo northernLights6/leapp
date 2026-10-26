@@ -631,6 +631,7 @@ def graph_io_signature(model: ModelProto) -> Dict[str, List[tuple]]:
 def rewrite_onnx_for_tensorrt(
     model_or_path: Union[str, ModelProto],
     output_path: Optional[str] = None,
+    surgeon_ops: Optional[Sequence[str]] = None,
 ) -> ModelProto:
     """Apply GraphSurgeon rewrites that unblock TensorRT parse for typical ONNX graphs.
 
@@ -638,9 +639,16 @@ def rewrite_onnx_for_tensorrt(
     intermediate Casts → INT32, Resize ``antialias`` → 0, and Reshape rank > 8
     lowered by dropping extent-1 axes. Graph I/O names, dtypes,
     and shapes are left unchanged so downstream YAML / Triton bindings stay valid.
+
+    ``surgeon_ops`` limits which unsupported operators are decomposed. When it
+    is omitted, the minimal catalog is used.
     """
+    if surgeon_ops is None:
+        from isaac_deploy_trt.prepare import surgeon_ops_for_target
+
+        surgeon_ops, _catalog = surgeon_ops_for_target()
     graph = load_graph(model_or_path)
-    apply_tensorrt_rewrites(graph)
+    apply_tensorrt_rewrites(graph, surgeon_ops=surgeon_ops)
     if output_path is not None:
         save_graph(graph, output_path)
         return onnx.load(output_path)

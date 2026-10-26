@@ -205,9 +205,9 @@ def optimize_graph(trt_compatible=False):
     """Post-compile optimizations for the saved LEAPP graph.
 
     Call after ``compile_graph()``. Options can be combined as more passes are
-    added; today ``trt_compatible`` is the TensorRT ONNX rewrite pass.
+    added; today ``trt_compatible`` is the TensorRT ONNX optimize pass.
 
-    When ``trt_compatible=True``, LEAPP rewrites exported ONNX files in the
+    When ``trt_compatible=True``, LEAPP optimizes exported ONNX files in the
     graph output directory so TensorRT can parse them (UINT8 intermediate
     Casts, Resize ``antialias``, rank-9 Reshape) and updates YAML checksums
     plus ``parameters.tensorrt_compatible``. Graph input/output names, dtypes,
@@ -254,18 +254,18 @@ def optimize_graph(trt_compatible=False):
         rewritten = [model.filename for model in result.models if model.rewritten]
         if rewritten:
             _get_logger().info(
-                f"Rewrote ONNX for TensorRT: {', '.join(rewritten)}"
+                f"Optimized ONNX for TensorRT: {', '.join(rewritten)}"
             )
         else:
             _get_logger().info(
-                "No TensorRT GraphSurgeon rewrites were needed for exported ONNX"
+                "No TensorRT GraphSurgeon optimizations were needed for exported ONNX"
             )
         applied["trt_compatible"] = result
 
     if not applied:
         _get_logger().warning(
             "leapp.optimize_graph() ran with no optimization options enabled. "
-            "Pass trt_compatible=True to rewrite ONNX for TensorRT."
+            "Pass trt_compatible=True to optimize ONNX for TensorRT."
         )
 
     return applied

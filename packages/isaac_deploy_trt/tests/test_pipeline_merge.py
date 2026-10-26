@@ -234,7 +234,7 @@ class TestOnnxPipelineMerge(unittest.TestCase):
             yaml_path = os.path.join(tmp, "exported.yaml")
             with open(yaml_path, "w", encoding="utf-8") as handle:
                 yaml.safe_dump(spec, handle)
-            result = merge_leapp_onnx_pipeline(yaml_path, rewrite=True)
+            result = merge_leapp_onnx_pipeline(yaml_path, optimize=True)
             self.assertEqual(result.rewritten_models, ["pre"])
             resize_nodes = [
                 node for node in result.model.graph.node if node.op_type == "Resize"
