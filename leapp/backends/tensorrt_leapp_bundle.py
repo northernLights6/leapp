@@ -32,6 +32,7 @@ from isaac_deploy_trt.surgery import (
     save_graph,
 )
 from isaac_deploy_trt.validate import check_onnx_ops_against_tensorrt
+from leapp.backends.onnx_export_backend import log_tensorrt_blockers
 from leapp.utils.logging import _get_logger
 
 
@@ -135,7 +136,7 @@ def _yaml_model_files(export_dir: str) -> Optional[List[str]]:
 def _update_yaml_parameters(
     yaml_path: str,
     hashes_by_filename: Dict[str, tuple[str, str]],
-    trt_compatible_by_filename: Dict[str, bool],
+    trt_compatible_by_filename: Dict[str, tuple[bool, str]],
 ) -> None:
     with open(yaml_path, "r", encoding="utf-8") as handle:
         spec = yaml.safe_load(handle) or {}
@@ -156,9 +157,20 @@ def _update_yaml_parameters(
                 params["sha256sum"] = sha256sum
                 changed = True
         if filename in trt_compatible_by_filename:
-            flag = bool(trt_compatible_by_filename[filename])
-            if params.get("tensorrt_compatible") != flag:
-                params["tensorrt_compatible"] = flag
+            flag, version = trt_compatible_by_filename[filename]
+            flag = bool(flag)
+            version = version or "minimal"
+            if "tensorrt_compatible" in params:
+                del params["tensorrt_compatible"]
+                changed = True
+            if "tensorrt_blockers" in params:
+                del params["tensorrt_blockers"]
+                changed = True
+            if params.get("optimization") != flag:
+                params["optimization"] = flag
+                changed = True
+            if params.get("tensorrt_version") != version:
+                params["tensorrt_version"] = version
                 changed = True
     if not changed:
         return
@@ -200,7 +212,7 @@ def align_leapp_export_for_tensorrt(
 
     result = AlignedBundleResult(output_dir=output_dir)
     hashes: Dict[str, tuple[str, str]] = {}
-    trt_compatible: Dict[str, bool] = {}
+    trt_compatible: Dict[str, tuple[bool, str]] = {}
     surgeon_ops, _catalog = surgeon_ops_for_target()
 
     for src in onnx_files:
@@ -230,9 +242,9 @@ def align_leapp_export_for_tensorrt(
 
         md5sum, sha256sum = _file_hashes(dst)
         hashes[filename] = (md5sum, sha256sum)
-        trt_compatible[filename] = bool(
-            check_onnx_ops_against_tensorrt(dst).ok
-        )
+        catalog = check_onnx_ops_against_tensorrt(dst)
+        log_tensorrt_blockers(dst, catalog)
+        trt_compatible[filename] = (bool(catalog.ok), catalog.tensorrt_version or "minimal")
         result.models.append(
             AlignedOnnxResult(
                 filename=filename,

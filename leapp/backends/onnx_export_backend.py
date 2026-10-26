@@ -3,11 +3,30 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+import os
 import torch
 from typing import Tuple
 from leapp.backends.export_backend import ExportBackend, prepare_tensors_for_export, SimplifiedONNXProgram
 from leapp.utils.logging import _get_logger
-import os
+
+
+def log_tensorrt_blockers(onnx_path: str, result) -> None:
+    """Write TensorRT catalog failures to the LEAPP log, not the YAML."""
+    blockers = list(getattr(result, "unsupported_ops", []) or [])
+    blockers.extend(
+        f"unknown:{name}" for name in (getattr(result, "unknown_ops", []) or [])
+    )
+    for error in getattr(result, "errors", []) or []:
+        if str(error).startswith("ONNX ops not "):
+            continue
+        blockers.append(str(error))
+    if not blockers:
+        return
+    _get_logger().warning(
+        f"tensorrt_blockers {os.path.basename(onnx_path)}: {', '.join(blockers)}"
+    )
+
+
 import onnx
 from onnx import AttributeProto, TensorProto, helper
 from onnx import numpy_helper
@@ -22,7 +41,8 @@ class ONNXExportBackend(ExportBackend):
         metadata['opset_version'] = getattr(self, 'opset_version', _constants.ONNX_DEFAULT_OPSET)
         tensorrt_compatible = getattr(self, 'tensorrt_compatible', None)
         if tensorrt_compatible is not None:
-            metadata['tensorrt_compatible'] = bool(tensorrt_compatible)
+            metadata['optimization'] = bool(tensorrt_compatible)
+            metadata['tensorrt_version'] = getattr(self, 'tensorrt_version', None) or "minimal"
         return metadata
 
     def get_backend_model_type(self):
@@ -256,7 +276,7 @@ class ONNXExportBackend(ExportBackend):
                 _get_logger().error(
                     f"ONNX model validation warning (model still saved): {e}")
 
-        # Record TensorRT compatibility in YAML (catalog check by default).
+        # Record the YAML ``optimization`` flag (catalog check by default).
         # Set backend_params={"annotate_tensorrt_compatible": False} to omit it.
         # Enable parse/build with {"validate_tensorrt": True} and optional
         # {"validate_tensorrt_build": True, "validate_tensorrt_strict": True}.
@@ -293,8 +313,10 @@ class ONNXExportBackend(ExportBackend):
         else:
             result = check_onnx_ops_against_tensorrt(onnx_path)
 
+        log_tensorrt_blockers(onnx_path, result)
         if annotate:
             self.tensorrt_compatible = bool(result.ok)
+            self.tensorrt_version = result.tensorrt_version or "minimal"
 
     def compile(self,  m: torch.nn.Module = None) -> SimplifiedONNXProgram:
         raise NotImplementedError(

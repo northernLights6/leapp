@@ -210,7 +210,8 @@ def optimize_graph(trt_compatible=False):
     When ``trt_compatible=True``, LEAPP optimizes exported ONNX files in the
     graph output directory so TensorRT can parse them (UINT8 intermediate
     Casts, Resize ``antialias``, rank-9 Reshape) and updates YAML checksums
-    plus ``parameters.tensorrt_compatible``. Graph input/output names, dtypes,
+    plus ``parameters.optimization`` and ``parameters.tensorrt_version``.
+    Graph input/output names, dtypes,
     and shapes are left unchanged. Requires ``isaac_deploy_trt``.
     """
     manager = _MANAGER

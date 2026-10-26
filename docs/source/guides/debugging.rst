@@ -184,7 +184,7 @@ TensorRT op-catalog checks, GraphSurgeon optimizations, and DAG merge live in
 the in-tree ``isaac_deploy_trt`` package (also the ``graph-surgery`` extra),
 not in the LEAPP tracing CLI. After ``compile_graph()``, optimize exported
 ONNX in place with ``leapp.optimize_graph(trt_compatible=True)``. That
-updates YAML checksums and ``parameters.tensorrt_compatible``.
+updates YAML checksums and ``parameters.optimization``.
 
 With no ``--tensorrt`` flag, ``check``, ``optimize``, ``optimize-dir``, and
 ``merge-pipeline --optimize`` use the minimal catalog,
@@ -212,7 +212,10 @@ parser table. ``--catalog`` replaces those flags with one JSON file.
 ``--build`` also runs TensorRT parse/build (requires ``tensorrt``).
 ``--strict`` exits non-zero if catalog or TensorRT checks fail.
 
-The YAML field ``parameters.tensorrt_compatible`` uses the same minimal
-catalog. Set ``backend_params={"annotate_tensorrt_compatible": False}`` to
-omit it, or ``{"validate_tensorrt": True, "validate_tensorrt_build": True}``
+The YAML fields ``parameters.optimization`` and ``parameters.tensorrt_version``
+record that check. ``tensorrt_version`` is ``minimal`` when no release was
+selected. Operators that fail the catalog are written to ``log.txt`` as
+``tensorrt_blockers <model.onnx>: ...`` and are not stored in the YAML.
+Set ``backend_params={"annotate_tensorrt_compatible": False}`` to omit the
+flag, or ``{"validate_tensorrt": True, "validate_tensorrt_build": True}``
 to require a TensorRT parse/build before marking ``true``.

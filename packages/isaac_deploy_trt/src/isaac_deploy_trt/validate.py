@@ -34,6 +34,7 @@ class TensorRTOnnxValidationResult:
     parse_ok: Optional[bool] = None
     build_ok: Optional[bool] = None
     catalog_path: Optional[str] = None
+    tensorrt_version: Optional[str] = None
     errors: List[str] = field(default_factory=list)
 
     @property
@@ -141,6 +142,30 @@ def _catalog_cuda(path: Path) -> str:
     return "" if cuda is None else str(cuda)
 
 
+def tensorrt_version_label(
+    *,
+    tensorrt: Optional[str] = None,
+    catalog_path: Optional[str] = None,
+) -> str:
+    """Version string recorded next to the YAML ``optimization`` flag.
+
+    Unspecified checks use the minimal catalog and return ``minimal``.
+    A requested release is returned without a leading ``v``.
+    """
+    if tensorrt:
+        text = str(tensorrt).strip()
+        if text[:1] in "vV" and len(text) > 1 and text[1].isdigit():
+            return text[1:]
+        return text
+    if catalog_path:
+        parent = Path(catalog_path).parent.name
+        if parent == "minimal":
+            return "minimal"
+        if parent[:1] in "vV" and len(parent) > 1 and parent[1].isdigit():
+            return parent[1:]
+    return "minimal"
+
+
 def _ops_from_catalog_file(path: Path) -> Dict[str, dict]:
     catalog = json.loads(path.read_text(encoding="utf-8"))
     operators = catalog.get("onnx_operators") or {}
@@ -224,6 +249,10 @@ def check_onnx_ops_against_tensorrt(
         unsupported_ops=unsupported,
         unknown_ops=unknown,
         catalog_path=catalog_path,
+        tensorrt_version=tensorrt_version_label(
+            tensorrt=tensorrt,
+            catalog_path=catalog_path,
+        ),
     )
     if unsupported:
         result.errors.append(

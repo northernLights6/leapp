@@ -234,7 +234,8 @@ Parameters
   decomposes operators the minimal TensorRT catalog marks unsupported.
   That catalog is the intersection of every checked-in release and platform
   (``tensorrt_catalogs/minimal/tensorrt_layers.json``). Updates YAML
-  checksums and ``parameters.tensorrt_compatible``. Graph I/O names, dtypes,
+  checksums, ``parameters.optimization``, and ``parameters.tensorrt_version``.
+  Graph I/O names, dtypes,
   and shapes are unchanged. Requires ``isaac_deploy_trt``. Defaults to
   ``False``.
 

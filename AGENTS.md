@@ -163,7 +163,8 @@ User-facing integration recipes belong here, not in this file.
 TensorRT GraphSurgeon optimizations, op catalogs, and LEAPP DAG merge live in
 `packages/isaac_deploy_trt`. After `compile_graph()`,
 `optimize_graph(trt_compatible=True)` optimizes ONNX in the graph directory
-and updates YAML checksums / `parameters.tensorrt_compatible`. When
+and updates YAML checksums / `parameters.optimization` /
+`parameters.tensorrt_version`. When
 `--tensorrt` is omitted, `check`, `optimize`, `merge-pipeline --optimize`,
 and that optimize pass use the minimal catalog
 (`tensorrt_catalogs/minimal/tensorrt_layers.json`): operators and native
